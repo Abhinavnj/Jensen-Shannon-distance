@@ -9,18 +9,18 @@
 #include "queue.h"
 #include "linkedlist.h"
 
-int readOptionalArgs (int argc, char *argv[], int* directoryThreads, int* fileThreads, int* analysisThreads, char** fileNameSuffix);
-int readRegArgs (int argc, char *argv[], char** fileNameSuffix, queue_t* fileQ, queue_t* dirQ);
-int startsWith (char* str, char* prefix);
-int endsWith (char* str, char* suffix);
-int isDir (char* path);
-int isReg (char* path);
-char** getFileWords (FILE* fp, int* wordCount);
+int readRegArgs(int argc, char *argv[], char** fileNameSuffix, queue_t* fileQ, queue_t* dirQ);
+int readOptionalArgs(int argc, char *argv[], int* directoryThreads, int* fileThreads, int* analysisThreads, char** fileNameSuffix);
+int isReg(char* path);
+int isDir(char* path);
+int startsWith(char* str, char* prefix);
+int endsWith(char* str, char* suffix);
+Node* fileWFD(char* filepath);
+char** getFileWords(FILE* fp, int* wordCount);
 int calculateWFD(Node** head, int wordCount);
 double calculateMeanFreq(Node* file1, Node* file2, char* word);
 double calculateKLD(Node* calcFile, Node* suppFile);
 double calculateJSD(Node* file1, Node* file2);
-Node* fileWFD(char* filepath);
 
 int main (int argc, char *argv[])
 {
@@ -57,6 +57,106 @@ int main (int argc, char *argv[])
     return rc;
 }
 
+int readRegArgs (int argc, char *argv[], char** fileNameSuffix, queue_t* fileQ, queue_t* dirQ) {
+    for (int i = 1; i < argc; i++) {
+        if (startsWith(argv[i], "-") == 0) {
+            continue;
+        }
+        else if (!isReg(argv[i])) {
+            if (!endsWith(argv[1], *fileNameSuffix)) {
+                enqueue(fileQ, argv[i]);
+            }
+        }
+        else if (!isDir(argv[i])) {
+            enqueue(dirQ, argv[i]);
+        }
+    }
+
+    return EXIT_SUCCESS;
+}
+
+int readOptionalArgs (int argc, char *argv[], int* directoryThreads, int* fileThreads, int* analysisThreads, char** fileNameSuffix) {
+    for (int i = 1; i < argc; i++) {
+        if (startsWith(argv[i], "-") == 0) {
+            int len = strlen(argv[i]) - 1;
+            char substring[len];
+            memcpy(substring, argv[i] + 2, len);
+            substring[len - 1] = '\0';  
+
+            if (startsWith(argv[i], "-s") == 0) {
+                *fileNameSuffix = substring;
+                printf("%s\n", *fileNameSuffix);
+            }
+            else if (startsWith(argv[i], "-f") == 0) {
+                *fileThreads = atoi(substring);
+                printf("%d\n", *fileThreads);
+            }
+            else if (startsWith(argv[i], "-d") == 0) {
+                *directoryThreads = atoi(substring);
+                printf("%d\n", *directoryThreads);
+            }
+            else if (startsWith(argv[i], "-a") == 0) {
+                *analysisThreads = atoi(substring);
+                printf("%d\n", *analysisThreads);
+            }
+        }
+        else if (isReg(argv[i]) && isDir(argv[i])) {
+            perror("incorrect arguments");
+            return EXIT_FAILURE;
+        }
+    }
+
+    return EXIT_SUCCESS;
+}
+
+int isReg (char* path) {
+    struct stat arg_data;
+    if (stat(path, &arg_data) == 0) {
+        if (S_ISREG(arg_data.st_mode)) {
+            return 0;
+        }
+    }
+    else {
+        return -1;
+    }
+
+    return 1;
+}
+
+int isDir (char* path) {
+    struct stat arg_data;
+    if (stat(path, &arg_data) == 0) {
+        if (S_ISDIR(arg_data.st_mode)) {
+            return 0;
+        }
+    }
+    else {
+        return -1; // does not exist
+    }
+
+    return 1;
+}
+
+int startsWith (char* str, char* prefix) {
+    for (int i = 0; i < strlen(prefix); i++) {
+        if (str[i] != prefix[i]) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+int endsWith (char* str, char* suffix) {
+    for (int i = 0; i < strlen(suffix); i++) {
+        if (str[strlen(str) - strlen(suffix) + i] != suffix[i]) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 Node* fileWFD(char* filepath) {
     Node* head = NULL;
     initHead(head);
@@ -76,40 +176,6 @@ Node* fileWFD(char* filepath) {
     calculateWFD(&head, wordCount);
 
     return head;
-}
-
-double calculateJSD(Node* file1, Node* file2){
-    return sqrt(0.5 * calculateKLD(file1, file2) + 0.5 * calculateKLD(file2, file1));
-}
-
-double calculateKLD(Node* calcFile, Node* suppFile) {
-    double kldValue = 0;
-
-    Node* ptr = calcFile;
-    while (ptr != NULL) {
-        double meanFrequency = calculateMeanFreq(calcFile, suppFile, ptr->word);
-        kldValue += (ptr->frequency * log2(ptr->frequency / meanFrequency));
-        ptr = ptr->next;
-    }
-
-    return kldValue;
-}
-
-double calculateMeanFreq(Node* file1, Node* file2, char* word) {
-    return 0.5 * (frequencyByWord(file1, word) + frequencyByWord(file2, word));
-}
-
-int calculateWFD(Node** head, int wordCount) {
-    double totalFreq = 0;
-
-    Node* ptr = *head;
-    while (ptr != NULL) {
-        ptr->frequency = (ptr->count / (double) wordCount);
-        totalFreq += ptr->frequency;
-        ptr = ptr->next;
-    }
-
-    return EXIT_SUCCESS;
 }
 
 char** getFileWords(FILE* fp, int* wordCount) {
@@ -169,102 +235,36 @@ char** getFileWords(FILE* fp, int* wordCount) {
     return words;
 }
 
-int readOptionalArgs (int argc, char *argv[], int* directoryThreads, int* fileThreads, int* analysisThreads, char** fileNameSuffix) {
-    for (int i = 1; i < argc; i++) {
-        if (startsWith(argv[i], "-") == 0) {
-            int len = strlen(argv[i]) - 1;
-            char substring[len];
-            memcpy(substring, argv[i] + 2, len);
-            substring[len - 1] = '\0';  
+int calculateWFD(Node** head, int wordCount) {
+    double totalFreq = 0;
 
-            if (startsWith(argv[i], "-s") == 0) {
-                *fileNameSuffix = substring;
-                printf("%s\n", *fileNameSuffix);
-            }
-            else if (startsWith(argv[i], "-f") == 0) {
-                *fileThreads = atoi(substring);
-                printf("%d\n", *fileThreads);
-            }
-            else if (startsWith(argv[i], "-d") == 0) {
-                *directoryThreads = atoi(substring);
-                printf("%d\n", *directoryThreads);
-            }
-            else if (startsWith(argv[i], "-a") == 0) {
-                *analysisThreads = atoi(substring);
-                printf("%d\n", *analysisThreads);
-            }
-        }
-        else if (isReg(argv[i]) && isDir(argv[i])) {
-            perror("incorrect arguments");
-            return EXIT_FAILURE;
-        }
+    Node* ptr = *head;
+    while (ptr != NULL) {
+        ptr->frequency = (ptr->count / (double) wordCount);
+        totalFreq += ptr->frequency;
+        ptr = ptr->next;
     }
 
     return EXIT_SUCCESS;
 }
 
-int readRegArgs (int argc, char *argv[], char** fileNameSuffix, queue_t* fileQ, queue_t* dirQ) {
-    for (int i = 1; i < argc; i++) {
-        if (startsWith(argv[i], "-") == 0) {
-            continue;
-        }
-        else if (!isReg(argv[i])) {
-            if (!endsWith(argv[1], *fileNameSuffix)) {
-                enqueue(fileQ, argv[i]);
-            }
-        }
-        else if (!isDir(argv[i])) {
-            enqueue(dirQ, argv[i]);
-        }
-    }
-
-    return EXIT_SUCCESS;
+double calculateMeanFreq(Node* file1, Node* file2, char* word) {
+    return 0.5 * (frequencyByWord(file1, word) + frequencyByWord(file2, word));
 }
 
-int startsWith (char* str, char* prefix) {
-    for (int i = 0; i < strlen(prefix); i++) {
-        if (str[i] != prefix[i]) {
-            return 1;
-        }
+double calculateKLD(Node* calcFile, Node* suppFile) {
+    double kldValue = 0;
+
+    Node* ptr = calcFile;
+    while (ptr != NULL) {
+        double meanFrequency = calculateMeanFreq(calcFile, suppFile, ptr->word);
+        kldValue += (ptr->frequency * log2(ptr->frequency / meanFrequency));
+        ptr = ptr->next;
     }
 
-    return 0;
+    return kldValue;
 }
 
-int endsWith (char* str, char* suffix) {
-    for (int i = 0; i < strlen(suffix); i++) {
-        if (str[strlen(str) - strlen(suffix) + i] != suffix[i]) {
-            return 1;
-        }
-    }
-
-    return 0;
-}
-
-int isDir (char* path) {
-    struct stat arg_data;
-    if (stat(path, &arg_data) == 0) {
-        if (S_ISDIR(arg_data.st_mode)) {
-            return 0;
-        }
-    }
-    else {
-        return -1; // does not exist
-    }
-
-    return 1;
-}
-
-int isReg (char* path) {
-    struct stat arg_data;
-    if (stat(path, &arg_data) == 0) {
-        if (S_ISREG(arg_data.st_mode)) {
-            return 0;
-        }
-    }
-    else {
-        return -1;
-    }
-
-    return 1;
+double calculateJSD(Node* file1, Node* file2){
+    return sqrt(0.5 * calculateKLD(file1, file2) + 0.5 * calculateKLD(file2, file1));
 }

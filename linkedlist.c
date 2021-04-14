@@ -47,6 +47,18 @@ int insertNode (Node** head, char* word) {
     return 0;
 }
 
+double frequencyByWord(Node* head, char* word) {
+    Node* ptr = head;
+    while (ptr != NULL) {
+        if (strcmp(ptr->word, word) == 0) {
+            return ptr->frequency;
+        }
+        ptr = ptr->next;
+    }
+
+    return 0;
+}
+
 void freeList (Node* head) {
     Node* tempNode = head;
     while (head != NULL) {
@@ -63,16 +75,4 @@ void printList (Node* head) {
         ptr = ptr->next;
     }
     printf("\n");
-}
-
-double frequencyByWord(Node* head, char* word) {
-    Node* ptr = head;
-    while (ptr != NULL) {
-        if (strcmp(ptr->word, word) == 0) {
-            return ptr->frequency;
-        }
-        ptr = ptr->next;
-    }
-
-    return 0;
 }
