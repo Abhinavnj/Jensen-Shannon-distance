@@ -24,7 +24,7 @@ int insertNode (Node** head, char* word) {
         newNode->next = *head;
         *head = newNode;
         return 0;
-    } 
+    }
     else {
         Node* current = *head;
         Node* prev = *head;
@@ -63,4 +63,16 @@ void printList (Node* head) {
         ptr = ptr->next;
     }
     printf("\n");
+}
+
+double frequencyByWord(Node* head, char* word) {
+    Node* ptr = head;
+    while (ptr != NULL) {
+        if (strcmp(ptr->word, word) == 0) {
+            return ptr->frequency;
+        }
+        ptr = ptr->next;
+    }
+
+    return 0;
 }

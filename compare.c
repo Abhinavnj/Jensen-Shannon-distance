@@ -3,6 +3,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <ctype.h>
+#include <math.h>
 
 #include "queue.h"
 #include "linkedlist.h"
@@ -13,7 +15,12 @@ int startsWith (char* str, char* prefix);
 int endsWith (char* str, char* suffix);
 int isDir (char* path);
 int isReg (char* path);
-int calculateWFD(char* filename);
+char** getFileWords (FILE* fp, int* wordCount);
+int calculateWFD(Node** head, int wordCount);
+double calculateMeanFreq(Node* file1, Node* file2, char* word);
+double calculateKLD(Node* calcFile, Node* suppFile);
+double calculateJSD(Node* file1, Node* file2);
+Node* fileWFD(char* filepath);
 
 int main (int argc, char *argv[])
 {
@@ -36,44 +43,130 @@ int main (int argc, char *argv[])
     
     // readRegArgs(argc, argv, &fileNameSuffix, &fileQ, &dirQ);
 
-    // enqueue(&fileQ, "hello");
-    // printf("%s\n", fileQ.data[0]);
-    // printf("%s\n", dirQ.data[0]);
-    // enqueue(&fileQ, "hello mom");
-    // printf("%s\n", fileQ.data[1]);
-    // printf("%s\n", dirQ.data[1]);
-    // enqueue(&fileQ, "hello daddy");
-    // printf("%s\n", fileQ.data[2]);
+    Node* head1 = fileWFD(argv[1]);
 
-    // char* rv;
-    // dequeue(&fileQ, &rv);
+    Node* head2 = fileWFD(argv[2]);
 
-    // destroy(&fileQ);
+    printf("%f\n", calculateJSD(head1, head2));
 
-    // Node* head = NULL;
-    // initHead(head);
-
-    // printList(head);
-    // freeList(head);
-
-    calculateWFD(argv[1]);
+    // printList(head1);
+    freeList(head1);
+    // printList(head2);
+    freeList(head2);
 
     return rc;
 }
 
-int calculateWFD(char* filename) {
-    FILE *fp = fopen(filename, "r");
+Node* fileWFD(char* filepath) {
+    Node* head = NULL;
+    initHead(head);
+
+    FILE* fp = fopen(filepath, "r");
     if (fp == NULL) {
-        perror("file error");
-        return EXIT_FAILURE;
+        perror("file opening failure");
+        return NULL;
     }
 
-    char buf[100];
-    while (fscanf(fp, "%s", buf) == 1) {
-        printf("%s\n", buf);
+    int wordCount = 0;
+    char** words = getFileWords(fp, &wordCount);
+    for (int i = 0; i < wordCount; i++) {
+        insertNode(&head, words[i]);
+    }
+
+    calculateWFD(&head, wordCount);
+
+    return head;
+}
+
+double calculateJSD(Node* file1, Node* file2){
+    return sqrt(0.5 * calculateKLD(file1, file2) + 0.5 * calculateKLD(file2, file1));
+}
+
+double calculateKLD(Node* calcFile, Node* suppFile) {
+    double kldValue = 0;
+
+    Node* ptr = calcFile;
+    while (ptr != NULL) {
+        double meanFrequency = calculateMeanFreq(calcFile, suppFile, ptr->word);
+        kldValue += (ptr->frequency * log2(ptr->frequency / meanFrequency));
+        ptr = ptr->next;
+    }
+
+    return kldValue;
+}
+
+double calculateMeanFreq(Node* file1, Node* file2, char* word) {
+    return 0.5 * (frequencyByWord(file1, word) + frequencyByWord(file2, word));
+}
+
+int calculateWFD(Node** head, int wordCount) {
+    double totalFreq = 0;
+
+    Node* ptr = *head;
+    while (ptr != NULL) {
+        ptr->frequency = (ptr->count / (double) wordCount);
+        totalFreq += ptr->frequency;
+        ptr = ptr->next;
     }
 
     return EXIT_SUCCESS;
+}
+
+char** getFileWords(FILE* fp, int* wordCount) {
+    char** words = malloc(0);
+
+    char c;
+    char* buf = malloc(5);
+    strcpy(buf, "\0");
+    int bufsize = 5;
+
+    while ((c = fgetc(fp)) != EOF) {
+        // generate current word
+        if (!isspace(c)) {
+            if (!ispunct(c)) {
+                size_t len = strlen(buf);
+                if (len >= (bufsize - 1)){
+                    buf = realloc(buf, len * 2);
+                    bufsize = len * 2;
+                }
+                buf[len++] = c;
+                buf[len] = '\0';
+            }
+        }
+        else { // insert word into list
+            ++(*wordCount);
+
+            int index = (*wordCount) - 1;
+            words = realloc(words, (*wordCount) * sizeof(char*));
+            words[index] = malloc(sizeof(buf));
+
+            for(int i = 0; buf[i]; i++){
+                buf[i] = tolower(buf[i]);
+            }
+            strcpy(words[index], buf);
+
+            // clear out buffer
+            buf = realloc(buf, 5);
+            strcpy(buf, "\0");
+            bufsize = 5;
+        }
+    }
+
+    // if file does not end with a new line
+    if (strcmp(buf, "\0") != 0) {
+        ++(*wordCount);
+
+        int index = (*wordCount) - 1;
+        words = realloc(words, (*wordCount) * sizeof(char*));
+        words[index] = malloc(sizeof(buf));
+
+        for(int i = 0; buf[i]; i++){
+            buf[i] = tolower(buf[i]);
+        }
+        strcpy(words[index], buf);
+    }
+
+    return words;
 }
 
 int readOptionalArgs (int argc, char *argv[], int* directoryThreads, int* fileThreads, int* analysisThreads, char** fileNameSuffix) {

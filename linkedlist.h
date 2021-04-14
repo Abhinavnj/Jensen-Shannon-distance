@@ -9,3 +9,4 @@ int initHead (Node* head);
 int insertNode(Node** head, char* word);
 void printList(Node* head);
 void freeList(Node* head);
+double frequencyByWord(Node* head, char* word);
