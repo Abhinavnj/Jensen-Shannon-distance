@@ -83,7 +83,7 @@ int readOptionalArgs (int argc, char *argv[], int* directoryThreads, int* fileTh
     for (int i = 1; i < argc; i++) {
         if (startsWith(argv[i], "-") == 0) {
             int len = strlen(argv[i]) - 1;
-            char substring[100];
+            char substring[len];
             memcpy(substring, argv[i] + 2, len);
             substring[len - 1] = '\0';  
 
