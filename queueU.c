@@ -3,9 +3,9 @@
 #include <unistd.h>
 #include <string.h>
 
-#include "queue.h"
+#include "queueU.h"
 
-int init(queue_t *Q)
+int initU(queueU_t *Q)
 {
     Q->data = malloc(0);
 	Q->count = 0;
@@ -15,7 +15,7 @@ int init(queue_t *Q)
 	return 0;
 }
 
-int destroy(queue_t *Q)
+int destroyU(queueU_t *Q)
 {
 	pthread_mutex_destroy(&Q->lock);
 
@@ -31,7 +31,7 @@ int destroy(queue_t *Q)
 
 // add item to end of queue
 // if the queue is full, block until space becomes available
-int enqueue(queue_t *Q, char* item)
+int enqueueU(queueU_t *Q, char* item)
 {
 	pthread_mutex_lock(&Q->lock);
 
@@ -49,7 +49,7 @@ int enqueue(queue_t *Q, char* item)
 }
 
 
-int dequeue(queue_t *Q, char** item)
+int dequeueU(queueU_t *Q, char** item)
 {
 	pthread_mutex_lock(&Q->lock);
 	
@@ -59,4 +59,11 @@ int dequeue(queue_t *Q, char** item)
 	pthread_mutex_unlock(&Q->lock);
 	
 	return 0;
+}
+
+void printU(queueU_t* Q) {
+    for (int i = 0; i < Q->count; i++) {
+        printf("%s\t", Q->data[i]);
+    }
+    printf("\n");
 }

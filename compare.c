@@ -6,10 +6,11 @@
 #include <ctype.h>
 #include <math.h>
 
-#include "queue.h"
+#include "queueU.h"
+#include "queueB.h"
 #include "linkedlist.h"
 
-int readRegArgs(int argc, char *argv[], char** fileNameSuffix, queue_t* fileQ, queue_t* dirQ);
+int readRegArgs(int argc, char *argv[], char** fileNameSuffix, queueB_t* fileQ, queueU_t* dirQ);
 int readOptionalArgs(int argc, char *argv[], int* directoryThreads, int* fileThreads, int* analysisThreads, char** fileNameSuffix);
 int isReg(char* path);
 int isDir(char* path);
@@ -30,18 +31,21 @@ int main (int argc, char *argv[])
     int analysisThreads = 1;
     char* fileNameSuffix = ".txt";
 
-    queue_t fileQ, dirQ;
-    init(&fileQ);
-    init(&dirQ);
+    queueB_t fileQ;
+    queueU_t dirQ;
+    initB(&fileQ);
+    initU(&dirQ);
 
     int rc = EXIT_SUCCESS;
 
-    // rc = readOptionalArgs(argc, argv, &directoryThreads, &fileThreads, &analysisThreads, &fileNameSuffix);
-    // if (rc) {
-    //     return rc;
-    // }
+    rc = readOptionalArgs(argc, argv, &directoryThreads, &fileThreads, &analysisThreads, &fileNameSuffix);
+    if (rc) {
+        return rc;
+    }
     
-    // readRegArgs(argc, argv, &fileNameSuffix, &fileQ, &dirQ);
+    readRegArgs(argc, argv, &fileNameSuffix, &fileQ, &dirQ);
+
+    printB(&fileQ);
 
     Node* head1 = fileWFD(argv[1]);
 
@@ -49,26 +53,26 @@ int main (int argc, char *argv[])
 
     printf("%f\n", calculateJSD(head1, head2));
 
-    // printList(head1);
+    printList(head1);
     freeList(head1);
-    // printList(head2);
+    printList(head2);
     freeList(head2);
 
     return rc;
 }
 
-int readRegArgs (int argc, char *argv[], char** fileNameSuffix, queue_t* fileQ, queue_t* dirQ) {
+int readRegArgs (int argc, char *argv[], char** fileNameSuffix, queueB_t* fileQ, queueU_t* dirQ) {
     for (int i = 1; i < argc; i++) {
         if (startsWith(argv[i], "-") == 0) {
             continue;
         }
         else if (!isReg(argv[i])) {
             if (!endsWith(argv[1], *fileNameSuffix)) {
-                enqueue(fileQ, argv[i]);
+                enqueueB(fileQ, argv[i]);
             }
         }
         else if (!isDir(argv[i])) {
-            enqueue(dirQ, argv[i]);
+            enqueueU(dirQ, argv[i]);
         }
     }
 
@@ -173,6 +177,11 @@ Node* fileWFD(char* filepath) {
         insertNode(&head, words[i]);
     }
 
+    // for (int i = 0; i < wordCount; i++){
+    //     free(words[i]);
+    // }
+    free(words);
+
     calculateWFD(&head, wordCount);
 
     return head;
@@ -231,6 +240,8 @@ char** getFileWords(FILE* fp, int* wordCount) {
         }
         strcpy(words[index], buf);
     }
+
+    free(buf);
 
     return words;
 }
