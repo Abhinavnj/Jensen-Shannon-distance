@@ -387,12 +387,13 @@ char** getFileWords(FILE* fp, int* wordCount) {
 
             int index = (*wordCount) - 1;
             words = realloc(words, (*wordCount) * sizeof(char*));
-            words[index] = malloc(sizeof(buf));
+            words[index] = malloc(sizeof(buf) + 2);
 
             for(int i = 0; buf[i]; i++){
                 buf[i] = tolower(buf[i]);
             }
             strcpy(words[index], buf);
+            strcat(words[index], "\0");
 
             // clear out buffer
             buf = realloc(buf, 5);
@@ -402,18 +403,19 @@ char** getFileWords(FILE* fp, int* wordCount) {
     }
 
     // if file does not end with a new line
-    // if (strcmp(buf, "\0") != 0) {
-    //     ++(*wordCount);
+    if (strcmp(buf, "\0") != 0) {
+        ++(*wordCount);
 
-    //     int index = (*wordCount) - 1;
-    //     words = realloc(words, (*wordCount) * sizeof(char*));
-    //     words[index] = malloc(sizeof(buf));
+        int index = (*wordCount) - 1;
+        words = realloc(words, (*wordCount) * sizeof(char*));
+        words[index] = malloc(sizeof(buf) + 2);
 
-    //     for(int i = 0; buf[i]; i++){
-    //         buf[i] = tolower(buf[i]);
-    //     }
-    //     strcpy(words[index], buf);
-    // }
+        for(int i = 0; buf[i]; i++){
+            buf[i] = tolower(buf[i]);
+        }
+        strcpy(words[index], buf);
+        strcat(words[index], "\0");
+    }
 
     free(buf);
 
