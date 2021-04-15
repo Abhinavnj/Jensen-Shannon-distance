@@ -12,7 +12,9 @@ int initHead (Node* head) {
 
 int insertNode (Node** head, char* word) {
     Node* newNode = malloc(sizeof(Node));
-    newNode->word = word;
+    int len = strlen(word) + 1;
+    newNode->word = malloc(len);
+    memcpy(newNode->word, word, len);
     newNode->next = NULL;
     newNode->count = 1;
 
@@ -30,6 +32,8 @@ int insertNode (Node** head, char* word) {
         Node* prev = *head;
         while (current != NULL){
             if (strcmp(current->word, word) == 0) {
+                free(newNode->word);
+                free(newNode);
                 ++current->count;
                 return 0;
             } 
@@ -64,6 +68,7 @@ void freeList (Node* head) {
     while (head != NULL) {
         tempNode = head;
         head = head->next;
+        free(tempNode->word);
         free(tempNode);
     }
 }

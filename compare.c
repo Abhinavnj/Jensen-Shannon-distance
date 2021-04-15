@@ -46,6 +46,8 @@ int main (int argc, char *argv[])
     readRegArgs(argc, argv, &fileNameSuffix, &fileQ, &dirQ);
 
     printB(&fileQ);
+    destroyU(&dirQ);
+    destroyB(&fileQ);
 
     Node* head1 = fileWFD(argv[1]);
 
@@ -177,9 +179,9 @@ Node* fileWFD(char* filepath) {
         insertNode(&head, words[i]);
     }
 
-    // for (int i = 0; i < wordCount; i++){
-    //     free(words[i]);
-    // }
+    for (int i = 0; i < wordCount; i++) {
+        free(words[i]);
+    }
     free(words);
 
     calculateWFD(&head, wordCount);
