@@ -1,4 +1,4 @@
-compare: compare.o queueU.o queueB.o linkedlist.o
+compare: compare.o queueU.o queueB.o linkedlist.o -lm
 	gcc -g -std=c99 -Wvla -Wall -fsanitize=address,undefined -o compare compare.o queueU.o queueB.o linkedlist.o
 
 compare.o: compare.c queueU.h queueB.h linkedlist.h
