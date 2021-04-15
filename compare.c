@@ -5,10 +5,12 @@
 #include <sys/stat.h>
 #include <ctype.h>
 #include <math.h>
+#include <dirent.h>
 
 #include "queueU.h"
 #include "queueB.h"
 #include "linkedlist.h"
+#include "filenode.h"
 
 int readRegArgs(int argc, char *argv[], char** fileNameSuffix, queueB_t* fileQ, queueU_t* dirQ);
 int readOptionalArgs(int argc, char *argv[], int* directoryThreads, int* fileThreads, int* analysisThreads, char** fileNameSuffix);
@@ -16,12 +18,35 @@ int isReg(char* path);
 int isDir(char* path);
 int startsWith(char* str, char* prefix);
 int endsWith(char* str, char* suffix);
-Node* fileWFD(char* filepath);
+void* fileThread(void *argptr);
+void* dirThread(void *argptr);
+int fileWFD(char* filepath, FileNode** WFDrepo);
 char** getFileWords(FILE* fp, int* wordCount);
 int calculateWFD(Node** head, int wordCount);
 double calculateMeanFreq(Node* file1, Node* file2, char* word);
 double calculateKLD(Node* calcFile, Node* suppFile);
 double calculateJSD(Node* file1, Node* file2);
+
+/* 
+read options (determine number of threads to create)
+create/initialize queues
+start requested number of file and directory threads
+add directories listed in arguments to directory queue
+add files listed in arguments to file queue
+join file and directory threads
+... continue to phase 2 */
+
+typedef struct file_arg {
+    queueB_t* fileQ;
+    FileNode** WFDrepo;
+    int* activeThreads;
+} f_arg;
+
+typedef struct dir_arg {
+    queueU_t* dirQ;
+    queueB_t* fileQ;
+    int* activeThreads;
+} d_arg;
 
 int main (int argc, char *argv[])
 {
@@ -29,12 +54,11 @@ int main (int argc, char *argv[])
     int directoryThreads = 1;
     int fileThreads = 1;
     int analysisThreads = 1;
-    char* fileNameSuffix = ".txt";
 
-    queueB_t fileQ;
-    queueU_t dirQ;
-    initB(&fileQ);
-    initU(&dirQ);
+    char* defaultSuffix = ".txt";
+    char* fileNameSuffix = malloc(sizeof(defaultSuffix) + 1);
+    memcpy(fileNameSuffix, defaultSuffix, strlen(defaultSuffix));
+    fileNameSuffix[strlen(defaultSuffix)] = '\0';
 
     int rc = EXIT_SUCCESS;
 
@@ -42,23 +66,82 @@ int main (int argc, char *argv[])
     if (rc) {
         return rc;
     }
-    
+
+    // printf("d: %d, f: %d, a: %d, suf: %s\n", directoryThreads, fileThreads, analysisThreads, fileNameSuffix);
+
+    queueB_t fileQ;
+    queueU_t dirQ;
+    initB(&fileQ);
+    initU(&dirQ);
+
+    FileNode* WFDrepo = NULL;
+    initFile(WFDrepo);
+
+    int activeThreads = 0;
+    void* retval = NULL;
+
     readRegArgs(argc, argv, &fileNameSuffix, &fileQ, &dirQ);
 
-    printB(&fileQ);
+    // start dir threads
+    pthread_t* dir_tids = malloc(directoryThreads * sizeof(pthread_t)); // hold thread ids
+    d_arg* dir_args = malloc(directoryThreads * sizeof(d_arg)); // hold arguments
+    
+    // initialize all arguments
+    for (int i = 0; i < directoryThreads; i++) {
+        dir_args[i].dirQ = &dirQ;
+        dir_args[i].fileQ = &fileQ;
+        dir_args[i].activeThreads = &activeThreads;
+    }
+    
+    // start all threads
+    for (int i = 0; i < directoryThreads; i++) {
+        pthread_create(&dir_tids[i], NULL, dirThread, &dir_args[i]);
+    }
+
+    // start file threads
+    pthread_t* file_tids = malloc(fileThreads * sizeof(pthread_t)); // hold thread ids
+    f_arg* file_args = malloc(fileThreads * sizeof(f_arg)); // hold arguments
+    
+    // initialize all arguments
+    for (int i = 0; i < fileThreads; i++) {
+        file_args[i].fileQ = &fileQ;
+        file_args[i].WFDrepo = &WFDrepo;
+        file_args[i].activeThreads = &activeThreads;
+    }
+    
+    // start all threads
+    for (int i = 0; i < fileThreads; i++) {
+        pthread_create(&file_tids[i], NULL, fileThread, &file_args[i]);
+    }
+
+    // join file and directory threads
+    // wait for all threads to finish
+    for (int i = 0; i < fileThreads; i++) {
+        pthread_join(file_tids[i], &retval);
+    }
+
+    for (int i = 0; i < directoryThreads; i++) {
+        pthread_join(dir_tids[i], &retval);
+        if ((int)retval == EXIT_FAILURE) {
+            rc = EXIT_FAILURE;
+        }
+        free(retval);
+    }
+
+    printFileList(WFDrepo);
+    // printf("file count %d\n", fileQ.count);
+    // printf("dir count %d\n", dirQ.count);
+
     destroyU(&dirQ);
     destroyB(&fileQ);
 
-    Node* head1 = fileWFD(argv[1]);
+    // freeing
+    free(file_tids);
+    free(dir_tids);
 
-    Node* head2 = fileWFD(argv[2]);
+    // TODO: analysis threads
 
-    printf("%f\n", calculateJSD(head1, head2));
-
-    printList(head1);
-    freeList(head1);
-    printList(head2);
-    freeList(head2);
+    free(fileNameSuffix);
 
     return rc;
 }
@@ -85,26 +168,26 @@ int readOptionalArgs (int argc, char *argv[], int* directoryThreads, int* fileTh
     for (int i = 1; i < argc; i++) {
         if (startsWith(argv[i], "-") == 0) {
             int len = strlen(argv[i]) - 1;
-            char substring[len];
+            char* substring = malloc(len);
             memcpy(substring, argv[i] + 2, len);
-            substring[len - 1] = '\0';  
+            substring[len - 1] = '\0';
 
             if (startsWith(argv[i], "-s") == 0) {
-                *fileNameSuffix = substring;
-                printf("%s\n", *fileNameSuffix);
+                int suffixLen = strlen(substring) + 1;
+                *fileNameSuffix = realloc(*fileNameSuffix, suffixLen);
+                strcpy(*fileNameSuffix, substring);
             }
             else if (startsWith(argv[i], "-f") == 0) {
                 *fileThreads = atoi(substring);
-                printf("%d\n", *fileThreads);
             }
             else if (startsWith(argv[i], "-d") == 0) {
                 *directoryThreads = atoi(substring);
-                printf("%d\n", *directoryThreads);
             }
             else if (startsWith(argv[i], "-a") == 0) {
                 *analysisThreads = atoi(substring);
-                printf("%d\n", *analysisThreads);
             }
+
+            free(substring);
         }
         else if (isReg(argv[i]) && isDir(argv[i])) {
             perror("incorrect arguments");
@@ -154,23 +237,110 @@ int startsWith (char* str, char* prefix) {
 }
 
 int endsWith (char* str, char* suffix) {
-    for (int i = 0; i < strlen(suffix); i++) {
-        if (str[strlen(str) - strlen(suffix) + i] != suffix[i]) {
-            return 1;
+    if (!str || !suffix)
+        return 0;
+    size_t lenstr = strlen(str);
+    size_t lensuffix = strlen(suffix);
+    if (lensuffix > lenstr) {
+        return 0;
+    }
+    return strncmp(str + lenstr - lensuffix, suffix, lensuffix) == 0;
+}
+
+void* dirThread(void *argptr) {
+    int* retval = malloc(sizeof(int));
+    *retval = EXIT_SUCCESS;
+
+    d_arg* args = (d_arg*) argptr;
+
+    queueU_t* dirQ = args->dirQ;
+    queueB_t* fileQ = args->fileQ;
+    int* activeThreads = args->activeThreads;
+
+    while (dirQ->count != 0 || *activeThreads > 0) {
+        if (dirQ->count == 0) {
+            --(*activeThreads);
+            if (*activeThreads == 0) {
+                pthread_cond_broadcast(&dirQ->read_ready);
+                qcloseB(fileQ);
+                return retval;
+            }
+            while (dirQ->count != 0 || *activeThreads != 0) {
+                pthread_cond_wait(&dirQ->read_ready, &dirQ->lock);
+            }
+            if (*activeThreads == 0) {
+                return retval;
+            }
+        }
+        ++(*activeThreads);
+
+        char* dirPath;
+        dequeueU(dirQ, &dirPath);
+
+        struct dirent* parentDirectory;
+        DIR* parentDir;
+
+        parentDir = opendir(dirPath);
+        if (!parentDir) {
+            perror("Failed to open directory!\n");
+            *retval = EXIT_FAILURE;
+            return retval;
+        }
+
+        struct stat data;
+        char* subpathname;
+        char* subpath = malloc(0);
+        while ((parentDirectory = readdir(parentDir))) {
+            subpathname = parentDirectory->d_name;
+            if (subpathname[0] != '.') {
+                int subpath_size = strlen(dirPath)+strlen(subpathname) + 2;
+                subpath = realloc(subpath, subpath_size * sizeof(char));
+                strcpy(subpath, dirPath);
+            
+                strcat(subpath, "/");
+                strcat(subpath, subpathname);
+
+                stat(subpath, &data);
+                if (!isReg(subpath) && subpath[0] != '.') {
+                    enqueueB(fileQ, subpath);
+                }
+                else if (!isDir(subpath) && subpath[0] != '.') {
+                    enqueueU(dirQ, subpath);
+                }
+            }
         }
     }
 
-    return 0;
+    return retval;
 }
 
-Node* fileWFD(char* filepath) {
+void* fileThread(void *argptr) {
+    int* retval = malloc(sizeof(int));
+    *retval = EXIT_SUCCESS;
+
+    f_arg* args = (f_arg*) argptr;
+
+    queueB_t* fileQ = args->fileQ;
+    FileNode** WFDrepo = args->WFDrepo;
+    int* activeThreads = args->activeThreads;
+
+    while (fileQ->count > 0 || *activeThreads > 0) { // TODO: also check all directory threads have stopped
+        char* filepath = NULL;
+        dequeueB(fileQ, &filepath);
+        fileWFD(filepath, WFDrepo);
+    }
+
+    return retval;
+}
+
+int fileWFD(char* filepath, FileNode** WFDrepo) {
     Node* head = NULL;
     initHead(head);
 
     FILE* fp = fopen(filepath, "r");
     if (fp == NULL) {
         perror("file opening failure");
-        return NULL;
+        return EXIT_FAILURE;
     }
 
     int wordCount = 0;
@@ -186,7 +356,9 @@ Node* fileWFD(char* filepath) {
 
     calculateWFD(&head, wordCount);
 
-    return head;
+    insertFileNode(WFDrepo, &head, filepath, wordCount);
+
+    return EXIT_SUCCESS;
 }
 
 char** getFileWords(FILE* fp, int* wordCount) {
@@ -230,18 +402,18 @@ char** getFileWords(FILE* fp, int* wordCount) {
     }
 
     // if file does not end with a new line
-    if (strcmp(buf, "\0") != 0) {
-        ++(*wordCount);
+    // if (strcmp(buf, "\0") != 0) {
+    //     ++(*wordCount);
 
-        int index = (*wordCount) - 1;
-        words = realloc(words, (*wordCount) * sizeof(char*));
-        words[index] = malloc(sizeof(buf));
+    //     int index = (*wordCount) - 1;
+    //     words = realloc(words, (*wordCount) * sizeof(char*));
+    //     words[index] = malloc(sizeof(buf));
 
-        for(int i = 0; buf[i]; i++){
-            buf[i] = tolower(buf[i]);
-        }
-        strcpy(words[index], buf);
-    }
+    //     for(int i = 0; buf[i]; i++){
+    //         buf[i] = tolower(buf[i]);
+    //     }
+    //     strcpy(words[index], buf);
+    // }
 
     free(buf);
 

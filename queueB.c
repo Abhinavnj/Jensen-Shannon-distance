@@ -1,8 +1,27 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
 
 #include "queueB.h"
+
+#define lock(X) \
+        do { \
+            int err = pthread_mutex_lock(X); \
+            if (err) { \
+                perror("lock"); \
+                abort(); \
+            } \
+        } while (0) \
+
+#define unlock(X) \
+        do { \
+            int err = pthread_mutex_unlock(X); \
+            if (err) { \
+                perror("unlock"); \
+                abort(); \
+            } \
+        } while (0) \
 
 int initB(queueB_t *Q)
 {
@@ -30,25 +49,30 @@ int destroyB(queueB_t *Q)
 // if the queue is full, block until space becomes available
 int enqueueB(queueB_t *Q, char* item)
 {
-	pthread_mutex_lock(&Q->lock);
+	lock(&Q->lock);
 	
 	while (Q->count == QSIZE && Q->open) {
 		pthread_cond_wait(&Q->write_ready, &Q->lock);
 	}
+
 	if (!Q->open) {
-		pthread_mutex_unlock(&Q->lock);
+		unlock(&Q->lock);
 		return -1;
 	}
 	
 	unsigned i = Q->head + Q->count;
 	if (i >= QSIZE) i -= QSIZE;
 	
-	Q->data[i] = item;
+	// Q->data[i] = item;
+    int len = strlen(item) + 1;
+    Q->data[i] = malloc(len);
+    strcpy(Q->data[i], item);
+
 	++Q->count;
 	
 	pthread_cond_signal(&Q->read_ready);
 	
-	pthread_mutex_unlock(&Q->lock);
+	unlock(&Q->lock);
 	
 	return 0;
 }
@@ -56,35 +80,42 @@ int enqueueB(queueB_t *Q, char* item)
 
 int dequeueB(queueB_t *Q, char** item)
 {
-	pthread_mutex_lock(&Q->lock);
+	lock(&Q->lock);
 	
 	while (Q->count == 0 && Q->open) {
+        // printf("wait\n");
 		pthread_cond_wait(&Q->read_ready, &Q->lock);
 	}
+
 	if (Q->count == 0) {
-		pthread_mutex_unlock(&Q->lock);
+		unlock(&Q->lock);
 		return -1;
 	}
 	
-	*item = Q->data[Q->head];
-	--Q->count;
-	++Q->head;
-	if (Q->head == QSIZE) Q->head = 0;
+    // printf("head %s\n", Q->data[Q->head]);
+    *item = malloc(strlen(Q->data[Q->head]) + 1);
+    strcpy(*item, Q->data[Q->head]);
+
+    --Q->count;
+    ++Q->head;
+    if (Q->head == QSIZE) Q->head = 0;
 	
 	pthread_cond_signal(&Q->write_ready);
 	
-	pthread_mutex_unlock(&Q->lock);
+	unlock(&Q->lock);
+
+    // printf("str %s\n", *item);
 	
 	return 0;
 }
 
 int qcloseB(queueB_t *Q)
 {
-	pthread_mutex_lock(&Q->lock);
+	lock(&Q->lock);
 	Q->open = 0;
 	pthread_cond_broadcast(&Q->read_ready);
 	pthread_cond_broadcast(&Q->write_ready);
-	pthread_mutex_unlock(&Q->lock);	
+	unlock(&Q->lock);	
 
 	return 0;
 }

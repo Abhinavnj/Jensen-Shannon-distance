@@ -11,6 +11,7 @@ int initU(queueU_t *Q)
 	Q->count = 0;
 	Q->head = 0;
 	pthread_mutex_init(&Q->lock, NULL);
+    pthread_cond_init(&Q->read_ready, NULL);
 	
 	return 0;
 }
@@ -52,6 +53,10 @@ int enqueueU(queueU_t *Q, char* item)
 int dequeueU(queueU_t *Q, char** item)
 {
 	pthread_mutex_lock(&Q->lock);
+
+    while (Q->count == 0) {
+		pthread_cond_wait(&Q->read_ready, &Q->lock);
+	}
 	
 	*item = Q->data[Q->count - 1];
 	--Q->count;

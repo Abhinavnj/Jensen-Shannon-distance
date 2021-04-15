@@ -1,0 +1,19 @@
+d: 1, f: 1, a: 1, suf: .txt
+read arg: testdirread arg: file1.txtread arg: file2.txtnew dir thread
+DQ -- 1
+FQ -- 0
+AT -- 0
+new file thread
+in here
+file added testdir/test1.txt
+file: testdir/test1.txt
+added file testdir/test1.txt
+file added testdir/test2.txt
+file: testdir/test2.txt
+added file testdir/test1.txt
+testdir/test1.txt: 1	
+in here
+testdir/test1.txt: 1	testdir/test2.txt: 1	
+testdir/test1.txt: 1	testdir/test2.txt: 1	
+file count 0
+dir count 0

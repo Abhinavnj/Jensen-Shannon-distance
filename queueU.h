@@ -5,6 +5,7 @@ typedef struct {
 	unsigned count;
 	unsigned head;
 	pthread_mutex_t lock;
+    pthread_cond_t read_ready;
 } queueU_t;
 
 int initU(queueU_t *Q);
