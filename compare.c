@@ -359,21 +359,30 @@ void* dirThread(void* argptr) {
     int* activeThreads = args->activeThreads;
     char* suffix = args->suffix;
 
-    while (dirQ->count != 0 || *activeThreads > 0) {
+    while (dirQ->count > 0 || *activeThreads > 0) {
+
+        printf("activeThreads: %d\n", *activeThreads);
+        printf("count: %d\n", dirQ->count);
+        
         if (dirQ->count == 0) {
             --(*activeThreads);
-            if (*activeThreads == 0) {
+            if (*activeThreads <= 0) {
                 printf("exit 1 thread id = %d\n", pthread_self());
                 pthread_cond_broadcast(&dirQ->read_ready);
+                // printf("return here\n");
                 qcloseB(fileQ);
                 return retval;
             }
-            while (dirQ->count != 0 || *activeThreads > 0) {
-                printf("waiting thread id = %d\t%d\t%d\n", pthread_self(), dirQ->count, *activeThreads);
-                pthread_cond_wait(&dirQ->read_ready, &dirQ->lock);
+            while (dirQ->count > 0 || *activeThreads > 0) {
+                printf("waiting thread id = %d\n", pthread_self());
+                // printf("waiting thread id = %d\t%d\t%d\n", pthread_self(), dirQ->count, *activeThreads);
+                if (dirQ->count > 0) {
+                    pthread_cond_wait(&dirQ->read_ready, &dirQ->lock);
+                }
+                // sleep(5);
             }
             if (*activeThreads == 0) {
-                printf("exit 3 thread id = %d\n", pthread_self());
+                printf("exit 2 thread id = %d\n", pthread_self());
                 return retval;
             }
         }
@@ -381,6 +390,9 @@ void* dirThread(void* argptr) {
 
         char* dirPath;
         dequeueU(dirQ, &dirPath);
+        // if (dirQ->count > 0) {
+        //     ++(*activeThreads);
+        // }
         
         // add '/' at the end of path if it doesn't have it
         int end = strlen(dirPath) - 1;
@@ -437,6 +449,9 @@ void* dirThread(void* argptr) {
         }
     }
 
+    printf("outside activeThreads: %d\n", *activeThreads);
+    printf("outside count: %d\n", dirQ->count);
+
     return retval;
 }
 
@@ -459,7 +474,7 @@ void* fileThread(void* argptr) {
         if (filepath != NULL) {
             fileWFD(filepath, WFDrepo);
         }
-        printf("activeThreads: %d\n", *activeThreads);
+        // printf("activeThreads: %d\n", *activeThreads);
     }
     printf("exit while\n");
 

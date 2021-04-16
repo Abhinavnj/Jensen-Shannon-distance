@@ -5,6 +5,24 @@
 
 #include "queueU.h"
 
+#define lock(X) \
+        do { \
+            int err = pthread_mutex_lock(X); \
+            if (err) { \
+                perror("lock"); \
+                abort(); \
+            } \
+        } while (0) \
+
+#define unlock(X) \
+        do { \
+            int err = pthread_mutex_unlock(X); \
+            if (err) { \
+                perror("unlock"); \
+                abort(); \
+            } \
+        } while (0) \
+
 int initU(queueU_t *Q)
 {
     Q->data = malloc(0);
@@ -29,7 +47,7 @@ int destroyU(queueU_t *Q)
 // add item to end of queue
 int enqueueU(queueU_t *Q, char* item)
 {
-	pthread_mutex_lock(&Q->lock);
+	lock(&Q->lock);
 
     // realloc
     ++Q->count;
@@ -44,7 +62,7 @@ int enqueueU(queueU_t *Q, char* item)
 
     pthread_cond_signal(&Q->read_ready);
 	
-	pthread_mutex_unlock(&Q->lock);
+	unlock(&Q->lock);
 	
 	return 0;
 }
@@ -52,7 +70,7 @@ int enqueueU(queueU_t *Q, char* item)
 
 int dequeueU(queueU_t *Q, char** item)
 {
-	pthread_mutex_lock(&Q->lock);
+	lock(&Q->lock);
 
     while (Q->count == 0) {
 		pthread_cond_wait(&Q->read_ready, &Q->lock);
@@ -60,11 +78,10 @@ int dequeueU(queueU_t *Q, char** item)
 	
 	*item = Q->data[Q->count - 1];
     // free(Q->data[Q->count - 1]);
-	--Q->count;
+	--(Q->count);
 	
-	pthread_mutex_unlock(&Q->lock);
+	unlock(&Q->lock);
 	
-    
 	return 0;
 }
 
