@@ -77,8 +77,6 @@ int main (int argc, char *argv[])
         return rc;
     }
 
-    // printf("d: %d, f: %d, a: %d, suf: %s\n", directoryThreads, fileThreads, analysisThreads, fileNameSuffix);
-
     queueB_t fileQ;
     queueU_t dirQ;
     initB(&fileQ);
@@ -91,8 +89,6 @@ int main (int argc, char *argv[])
     void* retval = NULL;
 
     readRegArgs(argc, argv, fileNameSuffix, &fileQ, &dirQ);
-
-    // printB(&fileQ);
 
     // start dir threads
     pthread_t* dir_tids = malloc(directoryThreads * sizeof(pthread_t)); // hold thread ids
@@ -142,10 +138,6 @@ int main (int argc, char *argv[])
         free(retval);
     }
 
-    // printFileList(WFDrepo);
-    // printf("file count %d\n", fileQ.count);
-    // printf("dir count %d\n", dirQ.count);
-
     destroyU(&dirQ);
     destroyB(&fileQ);
 
@@ -157,7 +149,6 @@ int main (int argc, char *argv[])
 
     // PHASE 2: ANALYSIS
     int n = fileListLength(WFDrepo);
-    // printf("%d\n", n);
     if (n < 2) {
         perror("less than 2 files found in the collection phase");
         return EXIT_FAILURE;
@@ -181,13 +172,8 @@ int main (int argc, char *argv[])
         }
     }
 
-    // for (int i = 0; i < combinations; i++) {
-    //     printf("%s\t%s\n", pairs[i]->file1, pairs[i]->file2);
-    // }
-
     int division = combinations / analysisThreads;
     int extraFiles = combinations % analysisThreads;
-    // printf("VALUES %d %d %d %d\n", n, combinations, division, extraFiles);
     int distributedThusFar = 0;
 
     // start analysis threads
@@ -204,7 +190,6 @@ int main (int argc, char *argv[])
         }
         analysis_args[i].startIndex = distributedThusFar;
         distributedThusFar += analysis_args[i].numPairs;
-        // printf("%d %d --> %d\n", analysis_args[i].numPairs, analysis_args[i].startIndex, analysis_args[i].startIndex + analysis_args[i].numPairs);
     }
     
     
