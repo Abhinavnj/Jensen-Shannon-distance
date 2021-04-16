@@ -36,6 +36,7 @@ int calculateWFD(Node** head, int wordCount);
 double calculateMeanFreq(Node* file1, Node* file2, char* word);
 double calculateKLD(Node* calcFile, Node* suppFile);
 double calculateJSD(Node* file1, Node* file2);
+int compareWordCount(const void* pair1, const void* pair2);
 void swap(filepair* one, filepair* two);
 
 typedef struct file_arg {
@@ -206,6 +207,8 @@ int main (int argc, char *argv[])
     free(analysis_tids);
     free(analysis_args);
 
+    // qsort(pairs, combinations, sizeof(filepair*), compareWordCount);
+
     int max_index = 0;
     for (int i = 0; i < combinations - 1; i++){
         max_index = i;
@@ -233,6 +236,14 @@ void swap(filepair* one, filepair* two){
     filepair temp = *one;
     *one = *two;
     *two = temp;
+}
+
+int compareWordCount(const void* pair1, const void* pair2) {
+
+    filepair* pairA = (filepair*) pair1;
+    filepair* pairB = (filepair*) pair2;
+
+    return (*pairA).totalWordCount - (*pairB).totalWordCount;
 }
 
 int readRegArgs (int argc, char *argv[], char* fileNameSuffix, queueB_t* fileQ, queueU_t* dirQ) {
