@@ -83,7 +83,6 @@ int dequeueB(queueB_t *Q, char** item)
 	lock(&Q->lock);
 	
 	while (Q->count == 0 && Q->open) {
-        // printf("wait\n");
 		pthread_cond_wait(&Q->read_ready, &Q->lock);
 	}
 
@@ -92,7 +91,6 @@ int dequeueB(queueB_t *Q, char** item)
 		return -1;
 	}
 	
-    // printf("head %s\n", Q->data[Q->head]);
     *item = malloc(strlen(Q->data[Q->head]) + 1);
     strcpy(*item, Q->data[Q->head]);
 
@@ -103,8 +101,6 @@ int dequeueB(queueB_t *Q, char** item)
 	pthread_cond_signal(&Q->write_ready);
 	
 	unlock(&Q->lock);
-
-    // printf("str %s\n", *item);
 	
 	return 0;
 }

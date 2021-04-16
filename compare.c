@@ -12,7 +12,16 @@
 #include "linkedlist.h"
 #include "filenode.h"
 
-int readRegArgs(int argc, char *argv[], char** fileNameSuffix, queueB_t* fileQ, queueU_t* dirQ);
+typedef struct filepair {
+    char* file1;
+    char* file2;
+    Node* file1Head;
+    Node* file2Head;
+    int totalWordCount;
+    double JSD;
+} filepair;
+
+int readRegArgs(int argc, char *argv[], char* fileNameSuffix, queueB_t* fileQ, queueU_t* dirQ);
 int readOptionalArgs(int argc, char *argv[], int* directoryThreads, int* fileThreads, int* analysisThreads, char** fileNameSuffix);
 int isReg(char* path);
 int isDir(char* path);
@@ -20,21 +29,14 @@ int startsWith(char* str, char* prefix);
 int endsWith(char* str, char* suffix);
 void* fileThread(void *argptr);
 void* dirThread(void *argptr);
+void* analysisThread(void* argptr);
 int fileWFD(char* filepath, FileNode** WFDrepo);
 char** getFileWords(FILE* fp, int* wordCount);
 int calculateWFD(Node** head, int wordCount);
 double calculateMeanFreq(Node* file1, Node* file2, char* word);
 double calculateKLD(Node* calcFile, Node* suppFile);
 double calculateJSD(Node* file1, Node* file2);
-
-/* 
-read options (determine number of threads to create)
-create/initialize queues
-start requested number of file and directory threads
-add directories listed in arguments to directory queue
-add files listed in arguments to file queue
-join file and directory threads
-... continue to phase 2 */
+int compareWordCount(const void* pair1, const void* pair2);
 
 typedef struct file_arg {
     queueB_t* fileQ;
@@ -46,7 +48,14 @@ typedef struct dir_arg {
     queueU_t* dirQ;
     queueB_t* fileQ;
     int* activeThreads;
+    char* suffix;
 } d_arg;
+
+typedef struct analysis_arg {
+    filepair** pairs;
+    int startIndex;
+    int numPairs;
+} a_arg;
 
 int main (int argc, char *argv[])
 {
@@ -62,6 +71,7 @@ int main (int argc, char *argv[])
 
     int rc = EXIT_SUCCESS;
 
+    // PHASE 1: COLLECTION
     rc = readOptionalArgs(argc, argv, &directoryThreads, &fileThreads, &analysisThreads, &fileNameSuffix);
     if (rc) {
         return rc;
@@ -80,7 +90,9 @@ int main (int argc, char *argv[])
     int activeThreads = 0;
     void* retval = NULL;
 
-    readRegArgs(argc, argv, &fileNameSuffix, &fileQ, &dirQ);
+    readRegArgs(argc, argv, fileNameSuffix, &fileQ, &dirQ);
+
+    printB(&fileQ);
 
     // start dir threads
     pthread_t* dir_tids = malloc(directoryThreads * sizeof(pthread_t)); // hold thread ids
@@ -91,6 +103,7 @@ int main (int argc, char *argv[])
         dir_args[i].dirQ = &dirQ;
         dir_args[i].fileQ = &fileQ;
         dir_args[i].activeThreads = &activeThreads;
+        dir_args[i].suffix = fileNameSuffix;
     }
     
     // start all threads
@@ -125,10 +138,9 @@ int main (int argc, char *argv[])
         if ((int)retval == EXIT_FAILURE) {
             rc = EXIT_FAILURE;
         }
-        free(retval);
     }
 
-    printFileList(WFDrepo);
+    // printFileList(WFDrepo);
     // printf("file count %d\n", fileQ.count);
     // printf("dir count %d\n", dirQ.count);
 
@@ -138,21 +150,104 @@ int main (int argc, char *argv[])
     // freeing
     free(file_tids);
     free(dir_tids);
+    free(file_args);
+    free(dir_args);
 
-    // TODO: analysis threads
+    // PHASE 2: ANALYSIS
+    int n = fileListLength(WFDrepo);
+    if (n < 2) {
+        perror("less then 2 files found in the collection phase");
+        return EXIT_FAILURE;
+    }
 
+    int combinations = n * (n - 1) / 2;
+    filepair** pairs = malloc(combinations * sizeof(filepair*));
+
+    int i = 0;
+    for (FileNode* ptr = WFDrepo; ptr != NULL; ptr = ptr->next) {
+        for (FileNode* ptr2 = ptr->next; ptr2 != NULL; ptr2 = ptr2->next) {
+            filepair* pair = malloc(sizeof(filepair));
+            pair->file1 = ptr->filename;
+            pair->file2 = ptr2->filename;
+            pair->file1Head = ptr->head;
+            pair->file2Head = ptr2->head;
+            pair->totalWordCount = ptr->wordCount + ptr2->wordCount;
+            pair->JSD = 0;
+            pairs[i] = pair;
+            i++;
+        }
+    }
+
+    // for (int i = 0; i < combinations; i++) {
+    //     printf("%s\t%s\n", pairs[i]->file1, pairs[i]->file2);
+    // }
+
+    int division = combinations / analysisThreads;
+    int extraFiles = combinations % analysisThreads;
+    // printf("VALUES %d %d %d %d\n", n, combinations, division, extraFiles);
+    int distributedThusFar = 0;
+
+    // start analysis threads
+    pthread_t* analysis_tids = malloc(analysisThreads * sizeof(pthread_t)); // hold thread ids
+    a_arg* analysis_args = malloc(analysisThreads * sizeof(a_arg)); // hold arguments
+    
+    // initialize all arguments
+    for (int i = 0; i < analysisThreads; i++) {
+        analysis_args[i].pairs = pairs;
+        analysis_args[i].numPairs = division;
+        if (extraFiles > 0) {
+            analysis_args[i].numPairs++;
+            extraFiles--;
+        }
+        analysis_args[i].startIndex = distributedThusFar;
+        distributedThusFar += analysis_args[i].numPairs;
+        // printf("%d %d --> %d\n", analysis_args[i].numPairs, analysis_args[i].startIndex, analysis_args[i].startIndex + analysis_args[i].numPairs);
+    }
+    
+    
+    // start all threads
+    for (int i = 0; i < analysisThreads; i++) {
+        pthread_create(&analysis_tids[i], NULL, analysisThread, &analysis_args[i]);
+    }
+
+    for (int i = 0; i < analysisThreads; i++) {
+        pthread_join(analysis_tids[i], &retval);
+        if ((int)retval == EXIT_FAILURE) {
+            rc = EXIT_FAILURE;
+        }
+        free(retval);
+    }
+    
+    free(analysis_tids);
+    free(analysis_args);
+
+    qsort(pairs, combinations, sizeof(filepair*), compareWordCount);
+
+    for (int i = 0; i < combinations; i++) {
+        printf("%f %s %s\n", pairs[i]->JSD, pairs[i]->file1, pairs[i]->file2);
+        free(pairs[i]);
+    }
+
+    free(pairs);
     free(fileNameSuffix);
 
     return rc;
 }
 
-int readRegArgs (int argc, char *argv[], char** fileNameSuffix, queueB_t* fileQ, queueU_t* dirQ) {
+int compareWordCount(const void* pair1, const void* pair2) {
+    filepair* pairA = (filepair*) pair1;
+    filepair* pairB = (filepair*) pair2;
+
+    return (pairA->totalWordCount - pairB->totalWordCount);
+}
+
+int readRegArgs (int argc, char *argv[], char* fileNameSuffix, queueB_t* fileQ, queueU_t* dirQ) {
     for (int i = 1; i < argc; i++) {
         if (startsWith(argv[i], "-") == 0) {
             continue;
         }
         else if (!isReg(argv[i])) {
-            if (!endsWith(argv[1], *fileNameSuffix)) {
+            if (endsWith(argv[1], fileNameSuffix)) {
                 enqueueB(fileQ, argv[i]);
             }
         }
@@ -237,17 +332,13 @@ int startsWith (char* str, char* prefix) {
 }
 
 int endsWith (char* str, char* suffix) {
-    if (!str || !suffix)
-        return 0;
-    size_t lenstr = strlen(str);
-    size_t lensuffix = strlen(suffix);
-    if (lensuffix > lenstr) {
-        return 0;
-    }
-    return strncmp(str + lenstr - lensuffix, suffix, lensuffix) == 0;
+    size_t slen = strlen(str);
+    size_t suffix_len = strlen(suffix);
+
+    return suffix_len <= slen && !strcmp(str + slen - suffix_len, suffix);
 }
 
-void* dirThread(void *argptr) {
+void* dirThread(void* argptr) {
     int* retval = malloc(sizeof(int));
     *retval = EXIT_SUCCESS;
 
@@ -256,6 +347,7 @@ void* dirThread(void *argptr) {
     queueU_t* dirQ = args->dirQ;
     queueB_t* fileQ = args->fileQ;
     int* activeThreads = args->activeThreads;
+    char* suffix = args->suffix;
 
     while (dirQ->count != 0 || *activeThreads > 0) {
         if (dirQ->count == 0) {
@@ -296,15 +388,14 @@ void* dirThread(void *argptr) {
                 int subpath_size = strlen(dirPath)+strlen(subpathname) + 2;
                 subpath = realloc(subpath, subpath_size * sizeof(char));
                 strcpy(subpath, dirPath);
-            
-                strcat(subpath, "/");
+
                 strcat(subpath, subpathname);
 
                 stat(subpath, &data);
-                if (!isReg(subpath) && subpath[0] != '.') {
+                if (!isReg(subpath) && endsWith(subpath, suffix)) {
                     enqueueB(fileQ, subpath);
                 }
-                else if (!isDir(subpath) && subpath[0] != '.') {
+                else if (!isDir(subpath)) {
                     enqueueU(dirQ, subpath);
                 }
             }
@@ -314,7 +405,7 @@ void* dirThread(void *argptr) {
     return retval;
 }
 
-void* fileThread(void *argptr) {
+void* fileThread(void* argptr) {
     int* retval = malloc(sizeof(int));
     *retval = EXIT_SUCCESS;
 
@@ -324,10 +415,29 @@ void* fileThread(void *argptr) {
     FileNode** WFDrepo = args->WFDrepo;
     int* activeThreads = args->activeThreads;
 
-    while (fileQ->count > 0 || *activeThreads > 0) { // TODO: also check all directory threads have stopped
+    while (fileQ->count > 0 || *activeThreads > 0) {
         char* filepath = NULL;
         dequeueB(fileQ, &filepath);
-        fileWFD(filepath, WFDrepo);
+        if (filepath != NULL)
+            fileWFD(filepath, WFDrepo);
+    }
+
+    return retval;
+}
+
+void* analysisThread(void* argptr) {
+    int* retval = malloc(sizeof(int));
+    *retval = EXIT_SUCCESS;
+
+    a_arg* args = (a_arg*) argptr;
+
+    filepair** pairs = args->pairs;
+    int startIndex = args->startIndex;
+    int numPairs = args->numPairs;
+
+    for (int i = startIndex; i < numPairs + startIndex; i++) {
+        filepair* pair = pairs[i];
+        pair->JSD = calculateJSD(pair->file1Head, pair->file2Head);
     }
 
     return retval;
@@ -387,7 +497,7 @@ char** getFileWords(FILE* fp, int* wordCount) {
 
             int index = (*wordCount) - 1;
             words = realloc(words, (*wordCount) * sizeof(char*));
-            words[index] = malloc(sizeof(buf) + 2);
+            words[index] = malloc(strlen(buf) + 2);
 
             for(int i = 0; buf[i]; i++){
                 buf[i] = tolower(buf[i]);
@@ -408,7 +518,7 @@ char** getFileWords(FILE* fp, int* wordCount) {
 
         int index = (*wordCount) - 1;
         words = realloc(words, (*wordCount) * sizeof(char*));
-        words[index] = malloc(sizeof(buf) + 2);
+        words[index] = malloc(strlen(buf) + 2);
 
         for(int i = 0; buf[i]; i++){
             buf[i] = tolower(buf[i]);

@@ -64,3 +64,14 @@ void freeFileList(FileNode* fileNodeHead) {
         free(tempNode);
     }
 }
+
+int fileListLength(FileNode* fileNodeHead) {
+    int len = 0;
+    FileNode* ptr = fileNodeHead;
+    while (ptr != NULL) {
+        len++;
+        ptr = ptr->next;
+    }
+
+    return len;
+}
