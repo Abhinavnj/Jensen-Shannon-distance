@@ -221,7 +221,7 @@ int main (int argc, char *argv[])
     free(analysis_tids);
     free(analysis_args);
 
-    qsort(pairs, combinations, sizeof(filepair*), compareWordCount);
+    // qsort(pairs, combinations, sizeof(filepair*), compareWordCount);
 
     for (int i = 0; i < combinations; i++) {
         printf("%f %s %s\n", pairs[i]->JSD, pairs[i]->file1, pairs[i]->file2);
@@ -559,12 +559,14 @@ double calculateKLD(Node* calcFile, Node* suppFile) {
     while (ptr != NULL) {
         double meanFrequency = calculateMeanFreq(calcFile, suppFile, ptr->word);
         kldValue += (ptr->frequency * log2(ptr->frequency / meanFrequency));
+        
+        // printf("%s %f %f\n", ptr->word, meanFrequency, kldValue);
         ptr = ptr->next;
     }
-
+    // printf("KLD: %f\n", kldValue);
     return kldValue;
 }
 
-double calculateJSD(Node* file1, Node* file2){
+double calculateJSD(Node* file1, Node* file2) {
     return sqrt(0.5 * calculateKLD(file1, file2) + 0.5 * calculateKLD(file2, file1));
 }
