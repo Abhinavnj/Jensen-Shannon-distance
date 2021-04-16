@@ -63,12 +63,13 @@ int enqueueB(queueB_t *Q, char* item)
 	unsigned i = Q->head + Q->count;
 	if (i >= QSIZE) i -= QSIZE;
 	
-	// Q->data[i] = item;
+    ++Q->count;
+
     int len = strlen(item) + 1;
     Q->data[i] = malloc(len);
     strcpy(Q->data[i], item);
-
-	++Q->count;
+    // printf("added: %s\n", Q->data[i]);
+    // printB(Q);
 	
 	pthread_cond_signal(&Q->read_ready);
 	
@@ -118,6 +119,7 @@ int qcloseB(queueB_t *Q)
 }
 
 void printB(queueB_t* Q) {
+    printf("File Queue: ");
     for (int i = 0; i < Q->count; i++) {
         printf("%s\t", Q->data[i]);
     }

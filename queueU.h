@@ -4,6 +4,7 @@ typedef struct {
 	char** data;
 	unsigned count;
 	unsigned head;
+    unsigned activeThreads;
 	pthread_mutex_t lock;
     pthread_cond_t read_ready;
 } queueU_t;

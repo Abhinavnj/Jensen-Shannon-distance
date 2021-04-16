@@ -27,7 +27,6 @@ int destroyU(queueU_t *Q)
 
 
 // add item to end of queue
-// if the queue is full, block until space becomes available
 int enqueueU(queueU_t *Q, char* item)
 {
 	pthread_mutex_lock(&Q->lock);
@@ -42,6 +41,8 @@ int enqueueU(queueU_t *Q, char* item)
     strcpy(Q->data[i], item);
 
     // free(item);
+
+    pthread_cond_signal(&Q->read_ready);
 	
 	pthread_mutex_unlock(&Q->lock);
 	
@@ -63,6 +64,7 @@ int dequeueU(queueU_t *Q, char** item)
 	
 	pthread_mutex_unlock(&Q->lock);
 	
+    
 	return 0;
 }
 

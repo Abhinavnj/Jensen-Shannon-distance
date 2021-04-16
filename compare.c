@@ -83,10 +83,12 @@ int main (int argc, char *argv[])
     initB(&fileQ);
     initU(&dirQ);
 
+    // dirQ.activeThreads = directoryThreads;
+
     FileNode* WFDrepo = NULL;
     initFile(WFDrepo);
 
-    int activeThreads = 0;
+    int activeThreads = directoryThreads;
     void* retval = NULL;
 
     readRegArgs(argc, argv, fileNameSuffix, &fileQ, &dirQ);
@@ -105,6 +107,7 @@ int main (int argc, char *argv[])
     
     // start all threads
     for (int i = 0; i < directoryThreads; i++) {
+        printf("starting\n");
         pthread_create(&dir_tids[i], NULL, dirThread, &dir_args[i]);
     }
 
@@ -129,6 +132,7 @@ int main (int argc, char *argv[])
     for (int i = 0; i < fileThreads; i++) {
         pthread_join(file_tids[i], &retval);
         free(retval);
+        printf("file thread joined\n");
     }
 
     for (int i = 0; i < directoryThreads; i++) {
@@ -137,6 +141,7 @@ int main (int argc, char *argv[])
             rc = EXIT_FAILURE;
         }
         free(retval);
+        printf("dir thread joined\n");
     }
 
     destroyU(&dirQ);
@@ -251,12 +256,12 @@ int readRegArgs (int argc, char *argv[], char* fileNameSuffix, queueB_t* fileQ, 
         if (startsWith(argv[i], "-") == 0) {
             continue;
         }
-        else if (!isReg(argv[i])) {
+        else if (isReg(argv[i]) == 0) {
             if (endsWith(argv[1], fileNameSuffix)) {
                 enqueueB(fileQ, argv[i]);
             }
         }
-        else if (!isDir(argv[i])) {
+        else if (isDir(argv[i]) == 0) {
             enqueueU(dirQ, argv[i]);
         }
     }
@@ -358,21 +363,37 @@ void* dirThread(void* argptr) {
         if (dirQ->count == 0) {
             --(*activeThreads);
             if (*activeThreads == 0) {
+                printf("exit 1 thread id = %d\n", pthread_self());
                 pthread_cond_broadcast(&dirQ->read_ready);
                 qcloseB(fileQ);
                 return retval;
             }
-            while (dirQ->count != 0 || *activeThreads != 0) {
+            while (dirQ->count != 0 || *activeThreads > 0) {
+                printf("waiting thread id = %d\t%d\t%d\n", pthread_self(), dirQ->count, *activeThreads);
                 pthread_cond_wait(&dirQ->read_ready, &dirQ->lock);
             }
             if (*activeThreads == 0) {
+                printf("exit 3 thread id = %d\n", pthread_self());
                 return retval;
             }
         }
-        ++(*activeThreads);
+        // ++(*activeThreads);
 
         char* dirPath;
         dequeueU(dirQ, &dirPath);
+        
+        // add '/' at the end of path if it doesn't have it
+        int end = strlen(dirPath) - 1;
+        int needNewDirPath = 0;
+        if (dirPath[end] != '/') {
+            needNewDirPath = 1;
+            int newLen = strlen(dirPath) + 2;
+            char* dirPathNew = malloc(newLen);
+            strcpy(dirPathNew, dirPath);
+            dirPathNew[newLen - 2] = '/';
+            dirPathNew[newLen - 1] = '\0';
+            dirPath = dirPathNew;
+        }
 
         struct dirent* parentDirectory;
         DIR* parentDir;
@@ -387,8 +408,11 @@ void* dirThread(void* argptr) {
         struct stat data;
         char* subpathname;
         char* subpath = malloc(0);
+
         while ((parentDirectory = readdir(parentDir))) {
             subpathname = parentDirectory->d_name;
+            // printf("dequeue: %s\n", dirPath);
+            
             if (subpathname[0] != '.') {
                 int subpath_size = strlen(dirPath)+strlen(subpathname) + 2;
                 subpath = realloc(subpath, subpath_size * sizeof(char));
@@ -397,7 +421,9 @@ void* dirThread(void* argptr) {
                 strcat(subpath, subpathname);
 
                 stat(subpath, &data);
-                if (!isReg(subpath) && endsWith(subpath, suffix)) {
+                // printf("found %s in %s, isRegm: %d\n", subpath, dirPath, isReg(subpath));
+                if (isReg(subpath) == 0 && endsWith(subpath, suffix)) {
+                    // printf("adding... %s to file queue\n", subpath);
                     enqueueB(fileQ, subpath);
                 }
                 else if (!isDir(subpath)) {
@@ -405,12 +431,18 @@ void* dirThread(void* argptr) {
                 }
             }
         }
+
+        if (needNewDirPath == 1) {
+            free(dirPath);
+        }
     }
 
     return retval;
 }
 
 void* fileThread(void* argptr) {
+    printf("file thread\n");
+
     int* retval = malloc(sizeof(int));
     *retval = EXIT_SUCCESS;
 
@@ -423,10 +455,13 @@ void* fileThread(void* argptr) {
     while (fileQ->count > 0 || *activeThreads > 0) {
         char* filepath = NULL;
         dequeueB(fileQ, &filepath);
+        printf("processing %s\n", filepath);
         if (filepath != NULL) {
             fileWFD(filepath, WFDrepo);
         }
+        printf("activeThreads: %d\n", *activeThreads);
     }
+    printf("exit while\n");
 
     return retval;
 }
