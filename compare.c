@@ -92,7 +92,7 @@ int main (int argc, char *argv[])
 
     readRegArgs(argc, argv, fileNameSuffix, &fileQ, &dirQ);
 
-    printB(&fileQ);
+    // printB(&fileQ);
 
     // start dir threads
     pthread_t* dir_tids = malloc(directoryThreads * sizeof(pthread_t)); // hold thread ids
@@ -131,13 +131,15 @@ int main (int argc, char *argv[])
     // wait for all threads to finish
     for (int i = 0; i < fileThreads; i++) {
         pthread_join(file_tids[i], &retval);
+        free(retval);
     }
 
     for (int i = 0; i < directoryThreads; i++) {
         pthread_join(dir_tids[i], &retval);
-        if ((int)retval == EXIT_FAILURE) {
+        if (*((int*)retval) == EXIT_FAILURE) {
             rc = EXIT_FAILURE;
         }
+        free(retval);
     }
 
     // printFileList(WFDrepo);
@@ -155,8 +157,9 @@ int main (int argc, char *argv[])
 
     // PHASE 2: ANALYSIS
     int n = fileListLength(WFDrepo);
+    // printf("%d\n", n);
     if (n < 2) {
-        perror("less then 2 files found in the collection phase");
+        perror("less than 2 files found in the collection phase");
         return EXIT_FAILURE;
     }
 
@@ -212,9 +215,6 @@ int main (int argc, char *argv[])
 
     for (int i = 0; i < analysisThreads; i++) {
         pthread_join(analysis_tids[i], &retval);
-        if ((int)retval == EXIT_FAILURE) {
-            rc = EXIT_FAILURE;
-        }
         free(retval);
     }
     
@@ -230,6 +230,7 @@ int main (int argc, char *argv[])
 
     free(pairs);
     free(fileNameSuffix);
+    freeFileList(WFDrepo);
 
     return rc;
 }
@@ -418,8 +419,9 @@ void* fileThread(void* argptr) {
     while (fileQ->count > 0 || *activeThreads > 0) {
         char* filepath = NULL;
         dequeueB(fileQ, &filepath);
-        if (filepath != NULL)
+        if (filepath != NULL) {
             fileWFD(filepath, WFDrepo);
+        }
     }
 
     return retval;
@@ -467,6 +469,7 @@ int fileWFD(char* filepath, FileNode** WFDrepo) {
     calculateWFD(&head, wordCount);
 
     insertFileNode(WFDrepo, &head, filepath, wordCount);
+    free(filepath);
 
     return EXIT_SUCCESS;
 }

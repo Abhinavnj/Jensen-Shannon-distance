@@ -93,6 +93,7 @@ int dequeueB(queueB_t *Q, char** item)
 	
     *item = malloc(strlen(Q->data[Q->head]) + 1);
     strcpy(*item, Q->data[Q->head]);
+    free(Q->data[Q->head]);
 
     --Q->count;
     ++Q->head;
