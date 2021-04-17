@@ -208,6 +208,7 @@ int main (int argc, char *argv[])
 
     qsort(pairs, combinations, sizeof(filepair*), compareWordCount);
 
+    printf("\n");
     for (int i = 0; i < combinations; i++) {
         printf("%f %s %s\n", pairs[i]->JSD, pairs[i]->file1, pairs[i]->file2);
         free(pairs[i]);
@@ -235,7 +236,7 @@ int readRegArgs (int argc, char *argv[], char* fileNameSuffix, queueB_t* fileQ, 
             continue;
         }
         else if (isReg(argv[i]) == 0) {
-            if (endsWith(argv[1], fileNameSuffix)) {
+            if (endsWith(argv[i], fileNameSuffix)) {
                 enqueueB(fileQ, argv[i]);
             }
         }
@@ -320,10 +321,10 @@ int startsWith (char* str, char* prefix) {
 }
 
 int endsWith (char* str, char* suffix) {
-    size_t slen = strlen(str);
-    size_t suffix_len = strlen(suffix);
+    int str_len = strlen(str);
+    int suffix_len = strlen(suffix);
 
-    return suffix_len <= slen && !strcmp(str + slen - suffix_len, suffix);
+    return suffix_len <= str_len && !strcmp(str + str_len - suffix_len, suffix);
 }
 
 void* dirThread(void* argptr) {
