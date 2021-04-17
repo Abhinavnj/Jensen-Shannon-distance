@@ -57,7 +57,6 @@ int enqueueU(queueU_t *Q, char* item)
     int len = strlen(item) + 1;
     Q->data[i] = malloc(len);
     strcpy(Q->data[i], item);
-
     // free(item);
 
     pthread_cond_signal(&Q->read_ready);
@@ -76,8 +75,10 @@ int dequeueU(queueU_t *Q, char** item)
 		pthread_cond_wait(&Q->read_ready, &Q->lock);
 	}
 	
-	*item = Q->data[Q->count - 1];
-    // free(Q->data[Q->count - 1]);
+	// *item = Q->data[Q->count - 1];
+    *item = malloc(strlen(Q->data[Q->count - 1]) + 1);
+    strcpy(*item, Q->data[Q->count - 1]);
+    free(Q->data[Q->count - 1]);
 	--(Q->count);
 	
 	unlock(&Q->lock);

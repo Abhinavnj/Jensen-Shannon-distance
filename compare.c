@@ -360,15 +360,15 @@ void* dirThread(void* argptr) {
         
         // add '/' at the end of path if it doesn't have it
         int end = strlen(dirPath) - 1;
-        int needNewDirPath = 0;
         if (dirPath[end] != '/') {
-            needNewDirPath = 1;
             int newLen = strlen(dirPath) + 2;
             char* dirPathNew = malloc(newLen);
             strcpy(dirPathNew, dirPath);
             dirPathNew[newLen - 2] = '/';
             dirPathNew[newLen - 1] = '\0';
-            dirPath = dirPathNew;
+            dirPath = realloc(dirPath, strlen(dirPathNew) + 1);
+            strcpy(dirPath, dirPathNew);
+            free(dirPathNew);
         }
 
         struct dirent* parentDirectory;
@@ -378,6 +378,7 @@ void* dirThread(void* argptr) {
         if (!parentDir) {
             perror("Failed to open directory!\n");
             *retval = EXIT_FAILURE;
+            free(dirPath);
             return retval;
         }
 
@@ -392,7 +393,7 @@ void* dirThread(void* argptr) {
                 int subpath_size = strlen(dirPath)+strlen(subpathname) + 2;
                 subpath = realloc(subpath, subpath_size * sizeof(char));
                 strcpy(subpath, dirPath);
-
+                
                 strcat(subpath, subpathname);
 
                 stat(subpath, &data);
@@ -405,9 +406,9 @@ void* dirThread(void* argptr) {
             }
         }
 
-        if (needNewDirPath == 1) {
-            free(dirPath);
-        }
+        closedir(parentDir);
+        free(subpath);
+        free(dirPath);
     }
 
     return retval;
