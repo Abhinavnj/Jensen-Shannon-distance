@@ -127,6 +127,9 @@ int main (int argc, char *argv[])
     // wait for all threads to finish
     for (int i = 0; i < fileThreads; i++) {
         pthread_join(file_tids[i], &retval);
+        if (*((int*)retval) == EXIT_FAILURE) {
+            rc = EXIT_FAILURE;
+        }
         free(retval);
     }
 
@@ -321,10 +324,9 @@ int startsWith (char* str, char* prefix) {
 }
 
 int endsWith (char* str, char* suffix) {
-    int str_len = strlen(str);
-    int suffix_len = strlen(suffix);
+    if (strlen(suffix) > strlen(str)) { return 0; }
 
-    return suffix_len <= str_len && !strcmp(str + str_len - suffix_len, suffix);
+    return !strcmp(str + strlen(str) - strlen(suffix), suffix);
 }
 
 void* dirThread(void* argptr) {
