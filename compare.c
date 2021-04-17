@@ -12,15 +12,6 @@
 #include "linkedlist.h"
 #include "filenode.h"
 
-typedef struct filepair {
-    char* file1;
-    char* file2;
-    Node* file1Head;
-    Node* file2Head;
-    int totalWordCount;
-    double JSD;
-} filepair;
-
 int readRegArgs(int argc, char *argv[], char* fileNameSuffix, queueB_t* fileQ, queueU_t* dirQ);
 int readOptionalArgs(int argc, char *argv[], int* directoryThreads, int* fileThreads, int* analysisThreads, char** fileNameSuffix);
 int isReg(char* path);
@@ -37,7 +28,15 @@ double calculateMeanFreq(Node* file1, Node* file2, char* word);
 double calculateKLD(Node* calcFile, Node* suppFile);
 double calculateJSD(Node* file1, Node* file2);
 int compareWordCount(const void* pair1, const void* pair2);
-void swap(filepair* one, filepair* two);
+
+typedef struct filepair {
+    char* file1;
+    char* file2;
+    Node* file1Head;
+    Node* file2Head;
+    int totalWordCount;
+    double JSD;
+} filepair;
 
 typedef struct file_arg {
     queueB_t* fileQ;
@@ -83,8 +82,6 @@ int main (int argc, char *argv[])
     initB(&fileQ);
     initU(&dirQ);
 
-    // dirQ.activeThreads = directoryThreads;
-
     FileNode* WFDrepo = NULL;
     initFile(WFDrepo);
 
@@ -97,7 +94,7 @@ int main (int argc, char *argv[])
     pthread_t* dir_tids = malloc(directoryThreads * sizeof(pthread_t)); // hold thread ids
     d_arg* dir_args = malloc(directoryThreads * sizeof(d_arg)); // hold arguments
     
-    // initialize all arguments
+    // initialize all dir arguments
     for (int i = 0; i < directoryThreads; i++) {
         dir_args[i].dirQ = &dirQ;
         dir_args[i].fileQ = &fileQ;
@@ -105,9 +102,8 @@ int main (int argc, char *argv[])
         dir_args[i].suffix = fileNameSuffix;
     }
     
-    // start all threads
+    // start all dir threads
     for (int i = 0; i < directoryThreads; i++) {
-        printf("starting\n");
         pthread_create(&dir_tids[i], NULL, dirThread, &dir_args[i]);
     }
 
@@ -115,14 +111,14 @@ int main (int argc, char *argv[])
     pthread_t* file_tids = malloc(fileThreads * sizeof(pthread_t)); // hold thread ids
     f_arg* file_args = malloc(fileThreads * sizeof(f_arg)); // hold arguments
     
-    // initialize all arguments
+    // initialize all file arguments
     for (int i = 0; i < fileThreads; i++) {
         file_args[i].fileQ = &fileQ;
         file_args[i].WFDrepo = &WFDrepo;
         file_args[i].activeThreads = &activeThreads;
     }
     
-    // start all threads
+    // start all file threads
     for (int i = 0; i < fileThreads; i++) {
         pthread_create(&file_tids[i], NULL, fileThread, &file_args[i]);
     }
@@ -132,7 +128,6 @@ int main (int argc, char *argv[])
     for (int i = 0; i < fileThreads; i++) {
         pthread_join(file_tids[i], &retval);
         free(retval);
-        printf("file thread joined\n");
     }
 
     for (int i = 0; i < directoryThreads; i++) {
@@ -141,7 +136,6 @@ int main (int argc, char *argv[])
             rc = EXIT_FAILURE;
         }
         free(retval);
-        printf("dir thread joined\n");
     }
 
     destroyU(&dirQ);
@@ -156,7 +150,7 @@ int main (int argc, char *argv[])
     // PHASE 2: ANALYSIS
     int n = fileListLength(WFDrepo);
     if (n < 2) {
-        perror("less than 2 files found in the collection phase");
+        perror("Less than 2 files found.");
         return EXIT_FAILURE;
     }
 
@@ -212,59 +206,27 @@ int main (int argc, char *argv[])
     free(analysis_tids);
     free(analysis_args);
 
-    // filepair* pairsCopy = malloc(combinations * sizeof(filepair));
-    // for (int i = 0; i < combinations; i++) {
-    //     pairsCopy[i] = *pairs[i];
-    // }
-
     qsort(pairs, combinations, sizeof(filepair*), compareWordCount);
-    // qsort(pairsCopy, combinations, sizeof(filepair), compareWordCount);
-
-    // insertion sort
-    // int max_index = 0;
-    // for (int i = 0; i < combinations - 1; i++){
-    //     max_index = i;
-    //     for (int j = i + 1; j < combinations; j++){
-    //         if (pairs[j]->totalWordCount > pairs[max_index]->totalWordCount) {
-    //             max_index = j;
-    //         }
-    //         swap (pairs[max_index], pairs[i]);
-    //     }
-    // }
 
     for (int i = 0; i < combinations; i++) {
-        printf("%f %s %s %d\n", pairs[i]->JSD, pairs[i]->file1, pairs[i]->file2, pairs[i]->totalWordCount);
+        printf("%f %s %s\n", pairs[i]->JSD, pairs[i]->file1, pairs[i]->file2);
         free(pairs[i]);
     }
 
-    // for (int i = 0; i < combinations; i++) {
-    //     printf("%f %s %s, %d\n", pairsCopy[i].JSD, pairsCopy[i].file1, pairsCopy[i].file2);
-    // }
-
     free(pairs);
-    // free(pairsCopy);
     free(fileNameSuffix);
     freeFileList(WFDrepo);
 
     return rc;
 }
 
-void swap(filepair* one, filepair* two){
-    filepair temp = *one;
-    *one = *two;
-    *two = temp;
-}
-
 int compareWordCount(const void* pair1, const void* pair2) {
-
     filepair** pairAPointer = (filepair**) (pair1);
     filepair** pairBPointer = (filepair**) (pair2);
     filepair* pairA = *pairAPointer;
     filepair* pairB = *pairBPointer;
 
-    printf("%d %d\n", pairA->totalWordCount, pairB->totalWordCount);
-
-    return pairA->totalWordCount - pairB->totalWordCount;
+    return pairB->totalWordCount - pairA->totalWordCount;
 }
 
 int readRegArgs (int argc, char *argv[], char* fileNameSuffix, queueB_t* fileQ, queueU_t* dirQ) {
@@ -376,16 +338,10 @@ void* dirThread(void* argptr) {
     char* suffix = args->suffix;
 
     while (dirQ->count > 0 || *activeThreads > 0) {
-
-        printf("activeThreads: %d\n", *activeThreads);
-        printf("count: %d\n", dirQ->count);
-        
         if (dirQ->count == 0) {
             --(*activeThreads);
             if (*activeThreads <= 0) {
-                printf("exit 1 thread id = %d\n", pthread_self());
                 pthread_cond_broadcast(&dirQ->read_ready);
-                // printf("return here\n");
                 qcloseB(fileQ);
                 return retval;
             }
@@ -393,17 +349,12 @@ void* dirThread(void* argptr) {
                 continue;
             }
             if (*activeThreads == 0) {
-                printf("exit 2 thread id = %d\n", pthread_self());
                 return retval;
             }
         }
-        // ++(*activeThreads);
 
         char* dirPath;
         dequeueU(dirQ, &dirPath);
-        // if (dirQ->count > 0) {
-        //     ++(*activeThreads);
-        // }
         
         // add '/' at the end of path if it doesn't have it
         int end = strlen(dirPath) - 1;
@@ -434,7 +385,6 @@ void* dirThread(void* argptr) {
 
         while ((parentDirectory = readdir(parentDir))) {
             subpathname = parentDirectory->d_name;
-            // printf("dequeue: %s\n", dirPath);
             
             if (subpathname[0] != '.') {
                 int subpath_size = strlen(dirPath)+strlen(subpathname) + 2;
@@ -444,9 +394,7 @@ void* dirThread(void* argptr) {
                 strcat(subpath, subpathname);
 
                 stat(subpath, &data);
-                // printf("found %s in %s, isRegm: %d\n", subpath, dirPath, isReg(subpath));
                 if (isReg(subpath) == 0 && endsWith(subpath, suffix)) {
-                    // printf("adding... %s to file queue\n", subpath);
                     enqueueB(fileQ, subpath);
                 }
                 else if (!isDir(subpath)) {
@@ -460,15 +408,10 @@ void* dirThread(void* argptr) {
         }
     }
 
-    printf("outside activeThreads: %d\n", *activeThreads);
-    printf("outside count: %d\n", dirQ->count);
-
     return retval;
 }
 
 void* fileThread(void* argptr) {
-    printf("file thread\n");
-
     int* retval = malloc(sizeof(int));
     *retval = EXIT_SUCCESS;
 
@@ -481,13 +424,10 @@ void* fileThread(void* argptr) {
     while (fileQ->count > 0 || *activeThreads > 0) {
         char* filepath = NULL;
         dequeueB(fileQ, &filepath);
-        printf("processing %s\n", filepath);
         if (filepath != NULL) {
             fileWFD(filepath, WFDrepo);
         }
-        // printf("activeThreads: %d\n", *activeThreads);
     }
-    printf("exit while\n");
 
     return retval;
 }
