@@ -211,7 +211,6 @@ int main (int argc, char *argv[])
 
     qsort(pairs, combinations, sizeof(filepair*), compareWordCount);
 
-    printf("\n");
     for (int i = 0; i < combinations; i++) {
         printf("%f %s %s\n", pairs[i]->JSD, pairs[i]->file1, pairs[i]->file2);
         free(pairs[i]);
