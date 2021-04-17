@@ -212,25 +212,37 @@ int main (int argc, char *argv[])
     free(analysis_tids);
     free(analysis_args);
 
-    // qsort(pairs, combinations, sizeof(filepair*), compareWordCount);
+    // filepair* pairsCopy = malloc(combinations * sizeof(filepair));
+    // for (int i = 0; i < combinations; i++) {
+    //     pairsCopy[i] = *pairs[i];
+    // }
 
-    int max_index = 0;
-    for (int i = 0; i < combinations - 1; i++){
-        max_index = i;
-        for (int j = i + 1; j < combinations; j++){
-            if (pairs[j]->totalWordCount > pairs[max_index]->totalWordCount){
-                max_index = j;
-            }
-            swap (pairs[max_index], pairs[i]);
-        }
-    }
+    qsort(pairs, combinations, sizeof(filepair*), compareWordCount);
+    // qsort(pairsCopy, combinations, sizeof(filepair), compareWordCount);
+
+    // insertion sort
+    // int max_index = 0;
+    // for (int i = 0; i < combinations - 1; i++){
+    //     max_index = i;
+    //     for (int j = i + 1; j < combinations; j++){
+    //         if (pairs[j]->totalWordCount > pairs[max_index]->totalWordCount) {
+    //             max_index = j;
+    //         }
+    //         swap (pairs[max_index], pairs[i]);
+    //     }
+    // }
 
     for (int i = 0; i < combinations; i++) {
-        printf("%f %s %s\n", pairs[i]->JSD, pairs[i]->file1, pairs[i]->file2);
+        printf("%f %s %s %d\n", pairs[i]->JSD, pairs[i]->file1, pairs[i]->file2, pairs[i]->totalWordCount);
         free(pairs[i]);
     }
 
+    // for (int i = 0; i < combinations; i++) {
+    //     printf("%f %s %s, %d\n", pairsCopy[i].JSD, pairsCopy[i].file1, pairsCopy[i].file2);
+    // }
+
     free(pairs);
+    // free(pairsCopy);
     free(fileNameSuffix);
     freeFileList(WFDrepo);
 
@@ -245,10 +257,14 @@ void swap(filepair* one, filepair* two){
 
 int compareWordCount(const void* pair1, const void* pair2) {
 
-    filepair* pairA = (filepair*) pair1;
-    filepair* pairB = (filepair*) pair2;
+    filepair** pairAPointer = (filepair**) (pair1);
+    filepair** pairBPointer = (filepair**) (pair2);
+    filepair* pairA = *pairAPointer;
+    filepair* pairB = *pairBPointer;
 
-    return (*pairA).totalWordCount - (*pairB).totalWordCount;
+    printf("%d %d\n", pairA->totalWordCount, pairB->totalWordCount);
+
+    return pairA->totalWordCount - pairB->totalWordCount;
 }
 
 int readRegArgs (int argc, char *argv[], char* fileNameSuffix, queueB_t* fileQ, queueU_t* dirQ) {
@@ -374,12 +390,7 @@ void* dirThread(void* argptr) {
                 return retval;
             }
             while (dirQ->count > 0 || *activeThreads > 0) {
-                printf("waiting thread id = %d\n", pthread_self());
-                // printf("waiting thread id = %d\t%d\t%d\n", pthread_self(), dirQ->count, *activeThreads);
-                if (dirQ->count > 0) {
-                    pthread_cond_wait(&dirQ->read_ready, &dirQ->lock);
-                }
-                // sleep(5);
+                continue;
             }
             if (*activeThreads == 0) {
                 printf("exit 2 thread id = %d\n", pthread_self());
